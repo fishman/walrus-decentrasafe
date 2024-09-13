@@ -1,10 +1,28 @@
-use crate::schema::blobs;
+use crate::schema::{blobs, manifests};
 use diesel::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Insertable, Serialize)]
 #[diesel(table_name = blobs)]
 pub struct Blob {
     pub uuid: String,
     pub data: Vec<u8>,
+}
+
+#[derive(Queryable, Insertable, Serialize, Deserialize, Debug)]
+#[diesel(table_name = manifests)]
+pub struct Manifest {
+    pub id: i32,
+    pub name: String,
+    pub reference: String,
+    pub content: Vec<u8>, // Store the JSON manifest as a byte array
+    pub created_at: chrono::NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = manifests)]
+pub struct NewManifest<'a> {
+    pub name: &'a str,
+    pub reference: &'a str,
+    pub content: &'a [u8],
 }

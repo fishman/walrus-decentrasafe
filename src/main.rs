@@ -10,8 +10,11 @@ use uuid::Uuid;
 
 mod models;
 mod schema;
-use models::Blob;
+use models::{Blob, Manifest, NewManifest};
 use schema::blobs::dsl::blobs;
+use schema::manifests::dsl::manifests;
+
+//use schema::manifests::dsl::manif;
 //use schema::blobs::dsl::*;
 
 #[derive(Clone)]
@@ -98,14 +101,87 @@ async fn complete_blob_upload(
     }
 }
 
-async fn fetch_manifest(name: web::Path<String>) -> impl Responder {
-    // Dummy manifest response
-    let manifest = serde_json::json!({
-        "schemaVersion": 2,
-        "name": name.clone(),
-        "layers": []
-    });
-    HttpResponse::Ok().json(manifest)
+async fn fetch_blob(data: web::Data<RegistryData>, digest: web::Path<String>) -> impl Responder {
+    let mut conn = data.pool.get().expect("Failed to get DB connection");
+
+    let blob = blobs
+        .filter(schema::blobs::uuid.eq(digest.as_str()))
+        .first::<Blob>(&mut conn);
+
+    match blob {
+        Ok(blob) => HttpResponse::Ok().body(blob.data),
+        Err(_) => HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" })),
+    }
+}
+
+async fn upload_manifest(
+    data: web::Data<RegistryData>,
+    name: web::Path<String>,
+    reference: web::Path<String>,
+    body: web::Bytes,
+) -> impl Responder {
+    let manifest = NewManifest {
+        name: &name,
+        reference: &reference,
+        content: &body,
+    };
+
+    let conn_result: Result<
+        PooledConnection<ConnectionManager<SqliteConnection>>,
+        diesel::r2d2::PoolError,
+    > = data.pool.get();
+
+    match conn_result {
+        Ok(mut conn) => {
+            diesel::insert_into(manifests)
+                .values(&manifest)
+                .execute(&mut conn)
+                .expect("Error inserting manifest");
+
+            HttpResponse::Created().json(
+                serde_json::json!({ "name": name.to_string(), "reference": reference.to_string() }),
+            )
+        }
+        Err(e) => {
+            eprintln!("Error getting connection from pool: {:?}", e);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+async fn fetch_manifest(
+    data: web::Data<RegistryData>,
+    name: web::Path<String>,
+    reference: web::Path<String>,
+) -> impl Responder {
+    let mut conn = data.pool.get().expect("Failed to get DB connection");
+
+    let manifest = manifests
+        .filter(schema::manifests::name.eq(name.as_str()))
+        .filter(schema::manifests::reference.eq(reference.as_str()))
+        .first::<Manifest>(&mut conn);
+
+    match manifest {
+        Ok(manifest) => HttpResponse::Ok().body(manifest.content),
+        Err(_) => {
+            HttpResponse::NotFound().json(serde_json::json!({ "error": "Manifest not found" }))
+        }
+    }
+}
+
+async fn get_tags(data: web::Data<RegistryData>, name: web::Path<String>) -> impl Responder {
+    let mut conn = data.pool.get().expect("Failed to get DB connection");
+
+    let tag_list: Vec<String> = manifests
+        .filter(schema::manifests::name.eq(name.as_str()))
+        .select(schema::manifests::reference)
+        .load::<String>(&mut conn)
+        .expect("Error loading tags");
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "name": name.to_string(),
+        "tags": tag_list
+    }))
 }
 
 #[tokio::main]
@@ -131,10 +207,16 @@ async fn main() -> std::io::Result<()> {
                 "/v2/{name}/blobs/uploads/{uuid}",
                 web::put().to(complete_blob_upload),
             )
+            .route("/v2/{name}/blobs/{digest}", web::get().to(fetch_blob))
             .route(
                 "/v2/{name}/manifests/{reference}",
                 web::get().to(fetch_manifest),
             )
+            .route(
+                "/v2/{name}/manifests/{reference}",
+                web::put().to(upload_manifest),
+            )
+            .route("/v2/{name}/tags/list", web::get().to(get_tags))
     })
     .bind("127.0.0.1:8090")?
     .run()
