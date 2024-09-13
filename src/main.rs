@@ -83,6 +83,7 @@ async fn check_registry() -> impl Responder {
 }
 
 async fn start_blob_upload(data: web::Data<RegistryData>) -> impl Responder {
+    log::info!("Start blob upload");
     let upload_uuid = Uuid::new_v4().to_string();
 
     let new_blob = Blob {
@@ -120,6 +121,7 @@ async fn complete_blob_upload(
         diesel::r2d2::PoolError,
     > = data.pool.get();
 
+    log::info!("Complete blob upload");
     match conn_result {
         Ok(mut conn) => {
             // Find the blob and update it with the uploaded data
@@ -237,12 +239,14 @@ async fn main() -> std::io::Result<()> {
 
     let registry_data = web::Data::new(RegistryData { pool });
 
+    log::info!("Starting server");
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::new(
                 "%a %r %s %b \"%{Referer}i\" \"%{User-Agent}i\" %Dms",
             ))
             .app_data(registry_data.clone())
+            .app_data(web::PayloadConfig::new(1000000 * 250))
             .route("/v2/", web::get().to(check_registry))
             .route(
                 "/v2/{name}/blobs/uploads/",
