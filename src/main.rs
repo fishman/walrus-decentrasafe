@@ -9,6 +9,7 @@ use env_logger::Env;
 use std::env;
 use std::time::Duration;
 use uuid::Uuid;
+use walrus_registry::calculate_sha256_digest;
 
 mod models;
 mod schema;
@@ -128,8 +129,13 @@ async fn complete_blob_upload(
                 .expect("Failed to update blob data");
 
             if updated == 1 {
-                HttpResponse::Created().json(serde_json::json!({ "uuid": uuid.to_string() }))
+                let digest = format!("sha256:{}", calculate_sha256_digest(&body));
+
+                HttpResponse::Created()
+                    .append_header(("Docker-Content-Digest", digest.clone()))
+                    .json(serde_json::json!({ "uuid": uuid.to_string(), "digest": digest }))
             } else {
+                log::error!("Blob with UUID {} not found for update", uuid);
                 HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" }))
             }
         }

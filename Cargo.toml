@@ -12,10 +12,12 @@ chrono = { version = "0.4.38", features = ["serde"] }
 diesel = { version = "2.2.4", features = ["sqlite", "serde_json", "r2d2", "uuid", "chrono", "extras", "time"] }
 dotenvy = "0.15.7"
 env_logger = "0.11.5"
+hex = { version = "0.4.3", features = ["serde"] }
 log = "0.4.22"
 r2d2 = "0.8.10"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
+sha2 = "0.10.8"
 sui-sdk = "0.0.0"
 tokio = { version = "1.40.0", features = ["full"] }
 uuid = { version = "1.10.0", features = ["v4"] }
