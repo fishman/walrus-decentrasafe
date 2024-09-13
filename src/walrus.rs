@@ -4,22 +4,31 @@ use base64::Engine;
 use serde_json::Value;
 use std::process::Command;
 
-pub fn store_blob(binary_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn store_blob(filename: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
     let output = Command::new("walrus")
         .arg("--json")
         .arg("store")
-        .arg(binary_path)
+        .arg(filename)
         .output()?;
 
     if !output.status.success() {
-        return Err(format!(
-            "Error storing blob: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
+        return Err(format!("Command failed with status: {:?}", output.status).into());
     }
 
-    Ok(())
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let json: Value = serde_json::from_str(&output_str)?;
+
+    let blob_id = json["alreadyCertified"]["blobId"]
+        .as_str()
+        .ok_or("Missing blobId")?
+        .to_string();
+
+    let tx_digest = json["alreadyCertified"]["event"]["txDigest"]
+        .as_str()
+        .ok_or("Missing txDigest")?
+        .to_string();
+
+    Ok((blob_id, tx_digest))
 }
 
 pub fn read_blob(uuid: &str) -> Result<String, Box<dyn std::error::Error>> {
