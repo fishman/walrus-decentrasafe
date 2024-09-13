@@ -1,8 +1,10 @@
+use actix_web::middleware::Logger;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager, Pool, PooledConnection};
 use diesel::sqlite::SqliteConnection;
 use dotenvy::dotenv;
+use env_logger::Env;
 use std::env;
 use uuid::Uuid;
 
@@ -106,21 +108,19 @@ async fn fetch_manifest(name: web::Path<String>) -> impl Responder {
     HttpResponse::Ok().json(manifest)
 }
 
-fn establish_connection() -> SqliteConnection {
-    dotenv().ok();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    SqliteConnection::establish(&database_url)
-        .expect(&format!("Error connecting to {}", database_url))
-}
-
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::init_from_env(Env::default().default_filter_or("info"));
+
     let pool = establish_connection_pool();
 
     let registry_data = web::Data::new(RegistryData { pool });
 
     HttpServer::new(move || {
         App::new()
+            .wrap(Logger::new(
+                "%a %r %s %b \"%{Referer}i\" \"%{User-Agent}i\" %Dms",
+            ))
             .app_data(registry_data.clone())
             .route("/v2/", web::get().to(check_registry))
             .route(
@@ -136,7 +136,7 @@ async fn main() -> std::io::Result<()> {
                 web::get().to(fetch_manifest),
             )
     })
-    .bind("127.0.0.1:8080")?
+    .bind("127.0.0.1:8090")?
     .run()
     .await
 }

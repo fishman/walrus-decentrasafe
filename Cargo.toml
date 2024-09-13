@@ -9,9 +9,12 @@ edition = "2021"
 actix-web = "4.9.0"
 diesel = { version = "2.2.4", features = ["sqlite", "serde_json", "r2d2", "uuid"] }
 dotenvy = "0.15.7"
+env_logger = "0.11.5"
+log = "0.4.22"
 r2d2 = "0.8.10"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
+sui-sdk = "0.0.0"
 tokio = { version = "1.40.0", features = ["full"] }
 uuid = { version = "1.10.0", features = ["v4"] }
 
