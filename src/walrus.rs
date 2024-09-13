@@ -4,7 +4,7 @@ use base64::Engine;
 use serde_json::Value;
 use std::process::Command;
 
-fn store_blob(filename: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
+pub fn store_blob(filename: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
     let output = Command::new("walrus")
         .arg("--json")
         .arg("store")
