@@ -1,11 +1,13 @@
 use actix_web::middleware::Logger;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use diesel::prelude::*;
-use diesel::r2d2::{self, ConnectionManager, Pool, PooledConnection};
+use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::sqlite::SqliteConnection;
+use diesel::{sql_query, RunQueryDsl};
 use dotenvy::dotenv;
 use env_logger::Env;
 use std::env;
+use std::time::Duration;
 use uuid::Uuid;
 
 mod models;
@@ -13,6 +15,13 @@ mod schema;
 use models::{Blob, Manifest, NewManifest};
 use schema::blobs::dsl::blobs;
 use schema::manifests::dsl::manifests;
+
+#[derive(Debug)]
+pub struct ConnectionOptions {
+    enable_wal: bool,
+    enable_foreign_keys: bool,
+    busy_timeout: Option<Duration>,
+}
 
 //use schema::manifests::dsl::manif;
 //use schema::blobs::dsl::*;
@@ -22,14 +31,50 @@ struct RegistryData {
     pool: Pool<ConnectionManager<SqliteConnection>>,
 }
 
+impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
+    for ConnectionOptions
+{
+    fn on_acquire(&self, conn: &mut SqliteConnection) -> Result<(), diesel::r2d2::Error> {
+        if self.enable_wal {
+            sql_query("PRAGMA journal_mode = WAL")
+                .execute(conn)
+                .map_err(diesel::r2d2::Error::QueryError)?;
+            sql_query("PRAGMA synchronous = NORMAL")
+                .execute(conn)
+                .map_err(diesel::r2d2::Error::QueryError)?;
+        }
+        if self.enable_foreign_keys {
+            sql_query("PRAGMA foreign_keys = ON")
+                .execute(conn)
+                .map_err(diesel::r2d2::Error::QueryError)?;
+        }
+        if let Some(d) = self.busy_timeout {
+            sql_query(&format!("PRAGMA busy_timeout = {};", d.as_millis()))
+                .execute(conn)
+                .map_err(diesel::r2d2::Error::QueryError)?;
+        }
+        Ok(())
+    }
+}
+
 fn establish_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let manager = ConnectionManager::<SqliteConnection>::new(database_url);
 
-    r2d2::Pool::builder()
+    let connection_options = ConnectionOptions {
+        enable_wal: true,
+        enable_foreign_keys: true,
+        busy_timeout: Some(Duration::from_secs(5)),
+    };
+
+    let pool = Pool::builder()
+        .max_size(1)
+        .connection_customizer(Box::new(connection_options))
         .build(manager)
-        .expect("Failed to create pool.")
+        .expect("Failed to create pool.");
+
+    pool
 }
 
 async fn check_registry() -> impl Responder {
@@ -44,14 +89,8 @@ async fn start_blob_upload(data: web::Data<RegistryData>) -> impl Responder {
         data: vec![],
     };
 
-    let conn_result: Result<
-        PooledConnection<ConnectionManager<SqliteConnection>>,
-        diesel::r2d2::PoolError,
-    > = data.pool.get();
-
-    match conn_result {
+    match data.pool.get() {
         Ok(mut conn) => {
-            // Insert the new blob into the database
             diesel::insert_into(blobs)
                 .values(&new_blob)
                 .execute(&mut conn)
@@ -123,7 +162,7 @@ async fn upload_manifest(
     let manifest = NewManifest {
         name: &name,
         reference: &reference,
-        content: &body,
+        content: &body.to_vec(),
     };
 
     let conn_result: Result<

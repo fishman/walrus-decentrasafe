@@ -1,4 +1,4 @@
 CREATE TABLE blobs (
-    uuid TEXT PRIMARY KEY,
+    uuid TEXT PRIMARY KEY NOT NULL,
     data BLOB NOT NULL
 );
