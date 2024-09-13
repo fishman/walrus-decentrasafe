@@ -243,7 +243,7 @@ async fn main() -> std::io::Result<()> {
                 web::post().to(start_blob_upload),
             )
             .route(
-                "/v2/{name}/blobs/uploads/{uuid}",
+                "/v2/blobs/uploads/{uuid}",
                 web::put().to(complete_blob_upload),
             )
             .route("/v2/{name}/blobs/{digest}", web::get().to(fetch_blob))
