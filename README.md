@@ -22,10 +22,23 @@ Time and money. In the spirit of hackathons this was coded in a weekend.
 
 ## Development
     cargo install cargo-watch
-    cargo watch -x run
+    cargo watch -i '*.sqlite*' -x run 
+
+If you're developing locally you need to add the following to `/etc/docker/daemon.json`
+
+      { "insecure-registries": [ "localhost:8090" ] }
+
+Inside the examples directory you can then run:
+
+        docker build . -t localhost:8090/nginx2
+        docker push localhost:8090/nginx2
 
 ## Add migrations
     cargo install diesel_cli --no-default-features --features sqlite
+
+## Security nightmares
+Since there is no auth, you can override other peoples images or create funky stuff if you write to the same 
+
 ## TODO
 - [ ] Make sure the same layer is only uploaded once
 - [ ] Check checksum of blobs, on uploads and return already uploaded when it exists
