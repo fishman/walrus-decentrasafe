@@ -1,22 +1,22 @@
-use actix_web::middleware::from_fn;
-use actix_web::{put, web, App, HttpResponse, HttpServer, Responder};
-use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
-use diesel::sqlite::SqliteConnection;
-use diesel::{sql_query, RunQueryDsl};
+use actix_web::{middleware::from_fn, web, App, HttpResponse, HttpServer, Responder};
+use diesel::{
+    prelude::*,
+    r2d2::{ConnectionManager, Pool, PooledConnection},
+    sql_query,
+    sqlite::SqliteConnection,
+    RunQueryDsl,
+};
 use dotenvy::dotenv;
 use env_logger::Env;
 use serde::Deserialize;
-use std::env;
-use std::time::Duration;
+use std::{env, time::Duration};
 use uuid::Uuid;
 use walrus_registry::calculate_sha256_digest;
 
 mod models;
 mod schema;
 use models::{Blob, Manifest, NewManifest};
-use schema::blobs::dsl::blobs;
-use schema::manifests::dsl::manifests;
+use schema::{blobs::dsl::blobs, manifests::dsl::manifests};
 
 mod logger;
 use crate::logger::highlight_status;
