@@ -1,6 +1,6 @@
-# Walrus Registry
+# Walrus Container Registry
 
-Web 2.0 frontend to use Walrus blob storage as OCI and docker registry
+Welcome to the frist web 3.0 OCI/docker container registry.
 
 ## FAQ
 
