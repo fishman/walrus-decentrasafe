@@ -71,7 +71,7 @@ async fn start_blob_upload(
 
     let new_blob = Blob {
         uuid: upload_uuid.clone(),
-        sha256digest: None,
+        digest: None,
         name: name.clone(),
         data: vec![],
     };
@@ -100,14 +100,17 @@ async fn start_blob_upload(
 
 async fn complete_blob_upload(
     data: web::Data<RegistryData>,
-    info: web::Path<(String, String)>,
+    path: web::Path<(String, String)>,
     _query: web::Query<UploadParams>,
     body: web::Bytes,
 ) -> impl Responder {
     log::info!("Complete blob upload");
-    let info = info.into_inner();
+    let (name, uuid) = path.into_inner();
 
-    let target = blobs.filter(schema::blobs::uuid.eq(info.1.to_string()));
+    let target = blobs
+        .filter(schema::blobs::uuid.eq(uuid.to_string()))
+        .filter(schema::blobs::name.eq(name.to_string()));
+
     let conn_result: Result<
         PooledConnection<ConnectionManager<SqliteConnection>>,
         diesel::r2d2::PoolError,
@@ -116,23 +119,26 @@ async fn complete_blob_upload(
     match conn_result {
         Ok(mut conn) => {
             // Find the blob and update it with the uploaded data
+            let digest = format!("sha256:{}", calculate_sha256_digest(&body));
+
             let updated = diesel::update(target)
-                .set(schema::blobs::data.eq(body.to_vec()))
+                .set((
+                    schema::blobs::data.eq(body.to_vec()),
+                    schema::blobs::digest.eq(digest.clone()),
+                ))
                 .execute(&mut conn)
                 .expect("Failed to update blob data");
 
             if updated == 1 {
-                let digest = format!("sha256:{}", calculate_sha256_digest(&body));
-
                 HttpResponse::Created()
                     .append_header(("Docker-Content-Digest", digest.clone()))
                     .json(serde_json::json!({
-                            "uuid": info.1.to_string(),
+                            "uuid": uuid.to_string(),
                             "digest": digest,
                             "status": "completed"
                     }))
             } else {
-                log::error!("Blob with UUID {} not found for update", info.1.to_string());
+                log::error!("Blob with UUID {} not found for update", uuid.to_string());
                 HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" }))
             }
         }
@@ -142,16 +148,48 @@ async fn complete_blob_upload(
         }
     }
 }
-//async fn check_blob(data: web::Data<RegistryData>, digest: web::Path<String>) -> impl Responder {
+
+async fn check_blob(data: web::Data<RegistryData>, digest: web::Path<String>) -> impl Responder {
+    let mut conn = data.pool.get().expect("Failed to get DB connection");
+
+    let blob = blobs
+        .filter(schema::blobs::name.eq(digest.as_str()))
+        .filter(schema::blobs::uuid.eq(digest.as_str()))
+        .first::<Blob>(&mut conn);
+
+    match blob {
+        Ok(blob) => HttpResponse::Ok().body(blob.data),
+        Err(_) => HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" })),
+    }
+}
+
+//async fn check_blob(
+//    data: web::Data<RegistryData>,
+//    path: web::Path<(String, String)>,
+//) -> impl Responder {
+//    let (name, checksum) = path.into_inner();
 //    let mut conn = data.pool.get().expect("Failed to get DB connection");
 //
 //    let blob = blobs
-//        .filter(schema::blobs::uuid.eq(digest.as_str()))
+//        .filter(schema::manifests::name.eq(name.as_str()))
+//        .filter(schema::blobs::sha256digest.eq(checksum.as_str()))
 //        .first::<Blob>(&mut conn);
 //
 //    match blob {
-//        Ok(blob) => HttpResponse::Ok().body(blob.data),
-//        Err(_) => HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" })),
+//        Ok(blob) => {
+//            let digest = format!("sha256:{}", calculate_sha256_digest(&blob.content));
+//            let content_length = manifest.content.len();
+//
+//            HttpResponse::Ok()
+//                .append_header(("Docker-Content-Digest", digest))
+//                .append_header(("Content-Length", content_length.to_string()))
+//                .json(serde_json::json!({
+//                    "status": "completed"
+//                }))
+//        }
+//        Err(_) => {
+//            HttpResponse::NotFound().json(serde_json::json!({ "error": "Manifest not found" }))
+//        }
 //    }
 //}
 
@@ -193,7 +231,7 @@ async fn upload_manifest(
                 .do_update()
                 .set((
                     schema::manifests::content.eq(&body.to_vec()),
-                    schema::manifests::created_at.eq(diesel::dsl::now),
+                    schema::manifests::updated_at.eq(diesel::dsl::now),
                 ))
                 .execute(&mut conn);
 
@@ -312,7 +350,7 @@ async fn main() -> std::io::Result<()> {
                 "/v2/{name}/blobs/uploads/{uuid}",
                 web::put().to(complete_blob_upload),
             )
-            //.route("/v2/{name}/blobs/{digest}", web::get().to(check_blob))
+            .route("/v2/{name}/blobs/{digest}", web::get().to(check_blob))
             .route("/v2/{name}/blobs/{digest}", web::get().to(fetch_blob))
             .route(
                 "/v2/{name}/manifests/{reference}",

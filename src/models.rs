@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub struct Blob {
     pub uuid: String,
     pub name: String,
-    pub sha256digest: Option<String>,
+    pub digest: Option<String>,
     pub data: Vec<u8>,
 }
 //
@@ -28,6 +28,7 @@ pub struct Manifest {
     pub reference: String,
     pub content: Vec<u8>, // Store the JSON manifest as a byte array
     pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
 }
 
 #[derive(Insertable)]
