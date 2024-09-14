@@ -1,4 +1,4 @@
-use actix_web::middleware::{from_fn, Logger};
+use actix_web::middleware::from_fn;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
@@ -274,7 +274,7 @@ async fn main() -> std::io::Result<()> {
     log::info!("Starting server");
     HttpServer::new(move || {
         App::new()
-            .wrap(Logger::new("%s %r %Dms"))
+            //.wrap(Logger::new("%s %r %Dms"))
             .wrap(from_fn(highlight_status))
             .app_data(registry_data.clone())
             .app_data(web::PayloadConfig::new(1000000 * 250))
