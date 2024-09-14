@@ -1,4 +1,4 @@
-use actix_web::middleware::Logger;
+use actix_web::middleware::{from_fn, Logger};
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
@@ -17,6 +17,9 @@ mod schema;
 use models::{Blob, Manifest, NewManifest};
 use schema::blobs::dsl::blobs;
 use schema::manifests::dsl::manifests;
+
+mod logger;
+use crate::logger::highlight_status;
 
 #[derive(Debug)]
 pub struct ConnectionOptions {
@@ -272,6 +275,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::new("%s %r %Dms"))
+            .wrap(from_fn(highlight_status))
             .app_data(registry_data.clone())
             .app_data(web::PayloadConfig::new(1000000 * 250))
             .route("/v2/", web::get().to(check_registry))
