@@ -6,6 +6,7 @@ use diesel::sqlite::SqliteConnection;
 use diesel::{sql_query, RunQueryDsl};
 use dotenvy::dotenv;
 use env_logger::Env;
+use serde::Deserialize;
 use std::env;
 use std::time::Duration;
 use uuid::Uuid;
@@ -22,6 +23,11 @@ pub struct ConnectionOptions {
     enable_wal: bool,
     enable_foreign_keys: bool,
     busy_timeout: Option<Duration>,
+}
+
+#[derive(Deserialize)]
+struct UploadParams {
+    digest: String,
 }
 
 //use schema::manifests::dsl::manif;
@@ -58,6 +64,10 @@ impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
     }
 }
 
+async fn readiness_check() -> impl Responder {
+    HttpResponse::Ok().body("Service is ready")
+}
+
 fn establish_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -82,7 +92,10 @@ async fn check_registry() -> impl Responder {
     HttpResponse::Ok().json(serde_json::json!({ "message": "OCI Registry v2" }))
 }
 
-async fn start_blob_upload(data: web::Data<RegistryData>) -> impl Responder {
+async fn start_blob_upload(
+    name: web::Path<String>,
+    data: web::Data<RegistryData>,
+) -> impl Responder {
     log::info!("Start blob upload");
     let upload_uuid = Uuid::new_v4().to_string();
 
@@ -99,7 +112,10 @@ async fn start_blob_upload(data: web::Data<RegistryData>) -> impl Responder {
                 .expect("Error inserting new blob");
 
             HttpResponse::Accepted()
-                .append_header(("Location", format!("/v2/blobs/uploads/{}", upload_uuid)))
+                .append_header((
+                    "Location",
+                    format!("/v2/{}/blobs/uploads/{}", name, upload_uuid),
+                ))
                 .append_header(("Docker-Upload-UUID", upload_uuid.clone()))
                 .json(serde_json::json!({ "uuid": upload_uuid }))
         }
@@ -112,16 +128,19 @@ async fn start_blob_upload(data: web::Data<RegistryData>) -> impl Responder {
 
 async fn complete_blob_upload(
     data: web::Data<RegistryData>,
+    _name: web::Path<String>,
     uuid: web::Path<String>,
+    _query: web::Query<UploadParams>,
     body: web::Bytes,
 ) -> impl Responder {
+    log::info!("Complete blob upload");
+
     let target = blobs.filter(schema::blobs::uuid.eq(uuid.as_str()));
     let conn_result: Result<
         PooledConnection<ConnectionManager<SqliteConnection>>,
         diesel::r2d2::PoolError,
     > = data.pool.get();
 
-    log::info!("Complete blob upload");
     match conn_result {
         Ok(mut conn) => {
             // Find the blob and update it with the uploaded data
@@ -130,12 +149,18 @@ async fn complete_blob_upload(
                 .execute(&mut conn)
                 .expect("Failed to update blob data");
 
+            log::info!("{}", updated);
+
             if updated == 1 {
                 let digest = format!("sha256:{}", calculate_sha256_digest(&body));
 
                 HttpResponse::Created()
                     .append_header(("Docker-Content-Digest", digest.clone()))
-                    .json(serde_json::json!({ "uuid": uuid.to_string(), "digest": digest }))
+                    .json(serde_json::json!({
+                            "uuid": uuid.to_string(),
+                            "digest": digest,
+                            "status": "completed"
+                    }))
             } else {
                 log::error!("Blob with UUID {} not found for update", uuid);
                 HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" }))
@@ -233,6 +258,8 @@ async fn get_tags(data: web::Data<RegistryData>, name: web::Path<String>) -> imp
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    dotenv().ok();
+    let bind_address = env::var("BIND_ADDRESS").expect("BIND_ADDRESS must be set");
     env_logger::init_from_env(Env::default().default_filter_or("info"));
 
     let pool = establish_connection_pool();
@@ -242,19 +269,13 @@ async fn main() -> std::io::Result<()> {
     log::info!("Starting server");
     HttpServer::new(move || {
         App::new()
-            .wrap(Logger::new(
-                "%a %r %s %b \"%{Referer}i\" \"%{User-Agent}i\" %Dms",
-            ))
+            .wrap(Logger::new("%s %r %Dms"))
             .app_data(registry_data.clone())
             .app_data(web::PayloadConfig::new(1000000 * 250))
             .route("/v2/", web::get().to(check_registry))
             .route(
                 "/v2/{name}/blobs/uploads/",
                 web::post().to(start_blob_upload),
-            )
-            .route(
-                "/v2/blobs/uploads/{uuid}",
-                web::put().to(complete_blob_upload),
             )
             .route("/v2/{name}/blobs/{digest}", web::get().to(fetch_blob))
             .route(
@@ -266,8 +287,13 @@ async fn main() -> std::io::Result<()> {
                 web::put().to(upload_manifest),
             )
             .route("/v2/{name}/tags/list", web::get().to(get_tags))
+            .route(
+                "/v2/{name}/blobs/uploads/{uuid}",
+                web::put().to(complete_blob_upload),
+            )
+            .route("/healthz", web::get().to(readiness_check))
     })
-    .bind("127.0.0.1:8090")?
+    .bind(bind_address)?
     .run()
     .await
 }
