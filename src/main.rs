@@ -70,7 +70,8 @@ async fn readiness_check() -> impl Responder {
 
 fn establish_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
     dotenv().ok();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database_url =
+        env::var("DATABASE_URL").expect("DATABASE_URL must be set, please check .env.example");
     let manager = ConnectionManager::<SqliteConnection>::new(database_url);
 
     let connection_options = ConnectionOptions {
@@ -259,7 +260,8 @@ async fn get_tags(data: web::Data<RegistryData>, name: web::Path<String>) -> imp
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
-    let bind_address = env::var("BIND_ADDRESS").expect("BIND_ADDRESS must be set");
+    let bind_address =
+        env::var("BIND_ADDRESS").expect("BIND_ADDRESS must be set, please check .env.example");
     env_logger::init_from_env(Env::default().default_filter_or("info"));
 
     let pool = establish_connection_pool();
