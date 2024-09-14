@@ -207,14 +207,31 @@ async fn upload_manifest(
 
     match conn_result {
         Ok(mut conn) => {
-            diesel::insert_into(manifests)
+            let result = diesel::insert_into(manifests)
                 .values(&manifest)
-                .execute(&mut conn)
-                .expect("Error inserting manifest");
+                .on_conflict((schema::manifests::name, schema::manifests::reference))
+                .do_update()
+                .set((
+                    schema::manifests::content.eq(&body.to_vec()),
+                    schema::manifests::created_at.eq(diesel::dsl::now),
+                ))
+                .execute(&mut conn);
 
-            HttpResponse::Created().json(
-                serde_json::json!({ "name": name.to_string(), "reference": reference.to_string() }),
-            )
+            let digest = format!("sha256:{}", calculate_sha256_digest(&manifest.content));
+            let content_length = manifest.content.len();
+
+            match result {
+                Ok(_) => {
+                    HttpResponse::Ok()
+                        .append_header(("Docker-Content-Digest", digest))
+                        .append_header(("Content-Length", content_length.to_string()))
+                        .json(serde_json::json!({ "name": name.to_string(), "reference": reference.to_string() }))
+                },
+                Err(e) => {
+                    eprintln!("Error inserting or updating manifest: {:?}", e);
+                    HttpResponse::InternalServerError().finish()
+                }
+            }
         }
         Err(e) => {
             eprintln!("Error getting connection from pool: {:?}", e);

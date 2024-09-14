@@ -4,5 +4,6 @@ CREATE TABLE manifests (
     reference TEXT NOT NULL,
     content BLOB NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    UNIQUE(name, reference)               -- Ensure uniqueness of name and reference
+    UNIQUE(name, reference)
 );
+CREATE INDEX idx_name_reference ON manifests (name, reference);
