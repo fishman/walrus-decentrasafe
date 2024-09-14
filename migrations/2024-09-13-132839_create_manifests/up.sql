@@ -6,4 +6,4 @@ CREATE TABLE manifests (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     UNIQUE(name, reference)
 );
-CREATE INDEX idx_name_reference ON manifests (name, reference);
+CREATE INDEX idx_manifest_name_reference ON manifests (name, reference);
