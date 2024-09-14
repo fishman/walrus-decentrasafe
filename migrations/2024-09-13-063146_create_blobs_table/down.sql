@@ -1,1 +1,2 @@
 DROP TABLE blobs;
+DROP INDEX IF EXISTS idx_sha256digest;

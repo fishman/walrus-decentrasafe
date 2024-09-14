@@ -2,7 +2,6 @@ use actix_web::{middleware::from_fn, web, App, HttpResponse, HttpServer, Respond
 use diesel::{
     prelude::*,
     r2d2::{ConnectionManager, Pool, PooledConnection},
-    sql_query,
     sqlite::SqliteConnection,
     RunQueryDsl,
 };
@@ -21,50 +20,17 @@ use schema::{blobs::dsl::blobs, manifests::dsl::manifests};
 mod logger;
 use crate::logger::highlight_status;
 
-#[derive(Debug)]
-pub struct ConnectionOptions {
-    enable_wal: bool,
-    enable_foreign_keys: bool,
-    busy_timeout: Option<Duration>,
-}
+mod sqlite;
+use crate::sqlite::ConnectionOptions;
 
 #[derive(Deserialize)]
 struct UploadParams {
     digest: String,
 }
 
-//use schema::manifests::dsl::manif;
-//use schema::blobs::dsl::*;
-
 #[derive(Clone)]
 struct RegistryData {
     pool: Pool<ConnectionManager<SqliteConnection>>,
-}
-
-impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
-    for ConnectionOptions
-{
-    fn on_acquire(&self, conn: &mut SqliteConnection) -> Result<(), diesel::r2d2::Error> {
-        if self.enable_wal {
-            sql_query("PRAGMA journal_mode = WAL")
-                .execute(conn)
-                .map_err(diesel::r2d2::Error::QueryError)?;
-            sql_query("PRAGMA synchronous = NORMAL")
-                .execute(conn)
-                .map_err(diesel::r2d2::Error::QueryError)?;
-        }
-        if self.enable_foreign_keys {
-            sql_query("PRAGMA foreign_keys = ON")
-                .execute(conn)
-                .map_err(diesel::r2d2::Error::QueryError)?;
-        }
-        if let Some(d) = self.busy_timeout {
-            sql_query(&format!("PRAGMA busy_timeout = {};", d.as_millis()))
-                .execute(conn)
-                .map_err(diesel::r2d2::Error::QueryError)?;
-        }
-        Ok(())
-    }
 }
 
 async fn readiness_check() -> impl Responder {
@@ -105,6 +71,8 @@ async fn start_blob_upload(
 
     let new_blob = Blob {
         uuid: upload_uuid.clone(),
+        sha256digest: None,
+        name: name.clone(),
         data: vec![],
     };
 
@@ -174,6 +142,18 @@ async fn complete_blob_upload(
         }
     }
 }
+//async fn check_blob(data: web::Data<RegistryData>, digest: web::Path<String>) -> impl Responder {
+//    let mut conn = data.pool.get().expect("Failed to get DB connection");
+//
+//    let blob = blobs
+//        .filter(schema::blobs::uuid.eq(digest.as_str()))
+//        .first::<Blob>(&mut conn);
+//
+//    match blob {
+//        Ok(blob) => HttpResponse::Ok().body(blob.data),
+//        Err(_) => HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" })),
+//    }
+//}
 
 async fn fetch_blob(data: web::Data<RegistryData>, digest: web::Path<String>) -> impl Responder {
     let mut conn = data.pool.get().expect("Failed to get DB connection");
@@ -332,6 +312,7 @@ async fn main() -> std::io::Result<()> {
                 "/v2/{name}/blobs/uploads/{uuid}",
                 web::put().to(complete_blob_upload),
             )
+            //.route("/v2/{name}/blobs/{digest}", web::get().to(check_blob))
             .route("/v2/{name}/blobs/{digest}", web::get().to(fetch_blob))
             .route(
                 "/v2/{name}/manifests/{reference}",

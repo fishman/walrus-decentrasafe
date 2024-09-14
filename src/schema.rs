@@ -3,6 +3,8 @@
 diesel::table! {
     blobs (uuid) {
         uuid -> Text,
+        name -> Text,
+        sha256digest -> Nullable<Text>,
         data -> Binary,
     }
 }

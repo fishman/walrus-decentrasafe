@@ -26,3 +26,6 @@ Time and money. In the spirit of hackathons this was coded in a weekend.
 
 ## Add migrations
     cargo install diesel_cli --no-default-features --features sqlite
+## TODO
+- [ ] Make sure the same layer is only uploaded once
+- [ ] Check checksum of blobs, on uploads and return already uploaded when it exists

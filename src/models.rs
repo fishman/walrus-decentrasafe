@@ -6,8 +6,19 @@ use serde::{Deserialize, Serialize};
 #[diesel(table_name = blobs)]
 pub struct Blob {
     pub uuid: String,
+    pub name: String,
+    pub sha256digest: Option<String>,
     pub data: Vec<u8>,
 }
+//
+//#[derive(Insertable)]
+//#[diesel(table_name = blobs)]
+//pub struct NewBlob {
+//    pub uuid: String,
+//    pub name: String,
+//    pub sha256digest: Option<String>,
+//    pub data: Vec<u8>,
+//}
 
 #[derive(Queryable, Insertable, Serialize, Deserialize, Debug)]
 #[diesel(table_name = manifests)]
