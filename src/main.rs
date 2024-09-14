@@ -84,7 +84,7 @@ fn establish_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
     };
 
     let pool = Pool::builder()
-        .max_size(1)
+        .max_size(10)
         .connection_customizer(Box::new(connection_options))
         .build(manager)
         .expect("Failed to create pool.");
@@ -153,8 +153,6 @@ async fn complete_blob_upload(
                 .execute(&mut conn)
                 .expect("Failed to update blob data");
 
-            log::info!("{}", updated);
-
             if updated == 1 {
                 let digest = format!("sha256:{}", calculate_sha256_digest(&body));
 
@@ -191,11 +189,11 @@ async fn fetch_blob(data: web::Data<RegistryData>, digest: web::Path<String>) ->
 }
 
 async fn upload_manifest(
+    path: web::Path<(String, String)>,
     data: web::Data<RegistryData>,
-    name: web::Path<String>,
-    reference: web::Path<String>,
     body: web::Bytes,
 ) -> impl Responder {
+    let (name, reference) = path.into_inner();
     let manifest = NewManifest {
         name: &name,
         reference: &reference,
@@ -221,6 +219,36 @@ async fn upload_manifest(
         Err(e) => {
             eprintln!("Error getting connection from pool: {:?}", e);
             HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+async fn check_manifest(
+    data: web::Data<RegistryData>,
+    path: web::Path<(String, String)>,
+) -> impl Responder {
+    let (name, reference) = path.into_inner();
+    let mut conn = data.pool.get().expect("Failed to get DB connection");
+
+    let manifest = manifests
+        .filter(schema::manifests::name.eq(name.as_str()))
+        .filter(schema::manifests::reference.eq(reference.as_str()))
+        .first::<Manifest>(&mut conn);
+
+    match manifest {
+        Ok(manifest) => {
+            let digest = format!("sha256:{}", calculate_sha256_digest(&manifest.content));
+            let content_length = manifest.content.len();
+
+            HttpResponse::Ok()
+                .append_header(("Docker-Content-Digest", digest))
+                .append_header(("Content-Length", content_length.to_string()))
+                .json(serde_json::json!({
+                    "status": "completed"
+                }))
+        }
+        Err(_) => {
+            HttpResponse::NotFound().json(serde_json::json!({ "error": "Manifest not found" }))
         }
     }
 }
@@ -288,6 +316,10 @@ async fn main() -> std::io::Result<()> {
                 web::put().to(complete_blob_upload),
             )
             .route("/v2/{name}/blobs/{digest}", web::get().to(fetch_blob))
+            .route(
+                "/v2/{name}/manifests/{reference}",
+                web::head().to(check_manifest),
+            )
             .route(
                 "/v2/{name}/manifests/{reference}",
                 web::get().to(fetch_manifest),
