@@ -1,5 +1,5 @@
 use actix_web::middleware::from_fn;
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{put, web, App, HttpResponse, HttpServer, Responder};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::sqlite::SqliteConnection;
@@ -132,14 +132,14 @@ async fn start_blob_upload(
 
 async fn complete_blob_upload(
     data: web::Data<RegistryData>,
-    _name: web::Path<String>,
-    uuid: web::Path<String>,
+    info: web::Path<(String, String)>,
     _query: web::Query<UploadParams>,
     body: web::Bytes,
 ) -> impl Responder {
     log::info!("Complete blob upload");
+    let info = info.into_inner();
 
-    let target = blobs.filter(schema::blobs::uuid.eq(uuid.as_str()));
+    let target = blobs.filter(schema::blobs::uuid.eq(info.1.to_string()));
     let conn_result: Result<
         PooledConnection<ConnectionManager<SqliteConnection>>,
         diesel::r2d2::PoolError,
@@ -161,12 +161,12 @@ async fn complete_blob_upload(
                 HttpResponse::Created()
                     .append_header(("Docker-Content-Digest", digest.clone()))
                     .json(serde_json::json!({
-                            "uuid": uuid.to_string(),
+                            "uuid": info.1.to_string(),
                             "digest": digest,
                             "status": "completed"
                     }))
             } else {
-                log::error!("Blob with UUID {} not found for update", uuid);
+                log::error!("Blob with UUID {} not found for update", info.1.to_string());
                 HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" }))
             }
         }
@@ -260,7 +260,7 @@ async fn get_tags(data: web::Data<RegistryData>, name: web::Path<String>) -> imp
     }))
 }
 
-#[tokio::main]
+#[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
     let bind_address =
@@ -283,6 +283,10 @@ async fn main() -> std::io::Result<()> {
                 "/v2/{name}/blobs/uploads/",
                 web::post().to(start_blob_upload),
             )
+            .route(
+                "/v2/{name}/blobs/uploads/{uuid}",
+                web::put().to(complete_blob_upload),
+            )
             .route("/v2/{name}/blobs/{digest}", web::get().to(fetch_blob))
             .route(
                 "/v2/{name}/manifests/{reference}",
@@ -293,10 +297,6 @@ async fn main() -> std::io::Result<()> {
                 web::put().to(upload_manifest),
             )
             .route("/v2/{name}/tags/list", web::get().to(get_tags))
-            .route(
-                "/v2/{name}/blobs/uploads/{uuid}",
-                web::put().to(complete_blob_upload),
-            )
             .route("/healthz", web::get().to(readiness_check))
     })
     .bind(bind_address)?
