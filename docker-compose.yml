@@ -1,0 +1,13 @@
+services:
+  walrus-registry:
+    build:
+      dockerfile: ./Dockerfile
+      args:
+        USER_ID: $USER_ID
+    env_file:
+      - .env.example
+    ports:
+      - 8090:8090
+    command: >
+      sh -c "ls -l &&diesel migration run
+      && ./target/debug/walrus-registry"
