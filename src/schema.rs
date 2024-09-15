@@ -5,6 +5,7 @@ diesel::table! {
         uuid -> Text,
         name -> Text,
         digest -> Nullable<Text>,
+        content_length -> Nullable<Integer>,
         data -> Binary,
     }
 }

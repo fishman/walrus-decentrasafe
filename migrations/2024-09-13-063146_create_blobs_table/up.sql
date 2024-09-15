@@ -2,6 +2,7 @@ CREATE TABLE blobs (
     uuid TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     digest TEXT,
+    content_length INT,
     data BLOB NOT NULL,
     UNIQUE (name, digest)
 );

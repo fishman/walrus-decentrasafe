@@ -1,5 +1,5 @@
 use crate::schema::{blobs, manifests};
-use diesel::prelude::*;
+use diesel::{prelude::*, sql_types::Integer};
 use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Insertable, Serialize, Deserialize, Debug)]
@@ -8,9 +8,10 @@ pub struct Blob {
     pub uuid: String,
     pub name: String,
     pub digest: Option<String>,
+    pub content_length: Option<i32>,
     pub data: Vec<u8>,
 }
-//
+
 //#[derive(Insertable)]
 //#[diesel(table_name = blobs)]
 //pub struct NewBlob {

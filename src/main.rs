@@ -71,6 +71,7 @@ async fn start_blob_upload(
     let new_blob = Blob {
         uuid: upload_uuid.clone(),
         digest: None,
+        content_length: None,
         name: name.clone(),
         data: vec![],
     };
@@ -118,11 +119,15 @@ async fn complete_blob_upload(
         Ok(mut conn) => {
             // Find the blob and update it with the uploaded data
             let digest = format!("sha256:{}", calculate_sha256_digest(&body));
+            // body.len() will never exceed i32 unless we remove all limitation on
+            // upload lizes
+            let content_length: i32 = body.len().try_into().unwrap();
 
             let updated = diesel::update(target)
                 .set((
                     schema::blobs::data.eq(body.to_vec()),
                     schema::blobs::digest.eq(digest.clone()),
+                    schema::blobs::content_length.eq(content_length),
                 ))
                 .execute(&mut conn)
                 .expect("Failed to update blob data");
