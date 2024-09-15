@@ -5,6 +5,7 @@ use actix_web::{
     Error,
 };
 
+use core::str;
 use std::fmt::Write;
 
 pub async fn highlight_status(
@@ -30,4 +31,16 @@ pub async fn highlight_status(
     log::info!("{}", log_msg);
 
     Ok(res)
+}
+
+pub fn log_vec_content(vec: &[u8]) {
+    // Try to convert `Vec<u8>` to a UTF-8 string
+    match str::from_utf8(vec) {
+        Ok(text) => log::debug!("Content as UTF-8: {}", text),
+        Err(_) => {
+            // If not valid UTF-8, log as hexadecimal
+            let hex_string = hex::encode(vec);
+            log::debug!("Content as hexadecimal: {}", hex_string);
+        }
+    }
 }

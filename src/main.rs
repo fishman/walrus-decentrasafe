@@ -1,4 +1,5 @@
 use actix_web::{middleware::from_fn, web, App, HttpResponse, HttpServer, Responder};
+use core::str;
 use diesel::{
     prelude::*,
     r2d2::{ConnectionManager, Pool, PooledConnection},
@@ -206,15 +207,31 @@ async fn check_blob(
 //    }
 //}
 
-async fn fetch_blob(data: web::Data<RegistryData>, digest: web::Path<String>) -> impl Responder {
+async fn fetch_blob(
+    data: web::Data<RegistryData>,
+    path: web::Path<(String, String)>,
+) -> impl Responder {
+    let (name, digest) = path.into_inner();
     let mut conn = data.pool.get().expect("Failed to get DB connection");
 
     let blob = blobs
-        .filter(schema::blobs::uuid.eq(digest.as_str()))
+        .filter(schema::blobs::name.eq(name.trim()))
+        .filter(schema::blobs::digest.eq(digest.trim()))
         .first::<Blob>(&mut conn);
 
     match blob {
-        Ok(blob) => HttpResponse::Ok().body(blob.data),
+        Ok(blob) => {
+            log::info!("stuff");
+            let digest = blob.digest.unwrap();
+            let content_length = blob.content_length.unwrap();
+
+            HttpResponse::Ok()
+                .append_header(("Docker-Content-Digest", digest))
+                .append_header(("Content-Length", content_length))
+                .append_header(("Content-Type", content_length))
+                .append_header(("Content-Type", "application/octet-stream"))
+                .body(blob.data)
+        }
         Err(_) => HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" })),
     }
 }
@@ -291,9 +308,8 @@ async fn check_manifest(
             HttpResponse::Ok()
                 .append_header(("Docker-Content-Digest", digest))
                 .append_header(("Content-Length", content_length.to_string()))
-                .json(serde_json::json!({
-                    "status": "completed"
-                }))
+                .append_header(("Content-Type", "application/vnd.oci.image.index.v1+json"))
+                .body(manifest.content)
         }
         Err(_) => {
             HttpResponse::NotFound().json(serde_json::json!({ "error": "Manifest not found" }))

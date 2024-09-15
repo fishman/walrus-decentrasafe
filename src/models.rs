@@ -1,5 +1,5 @@
 use crate::schema::{blobs, manifests};
-use diesel::{prelude::*, sql_types::Integer};
+use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Insertable, Serialize, Deserialize, Debug)]
