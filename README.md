@@ -22,6 +22,8 @@ Time and money. In the spirit of hackathons this was coded in a weekend.
 
 ## Development
     cargo install cargo-watch
+    cargo install diesel_cli --no-default-features --features sqlite
+    diesel migration run
     cargo watch -i '*.sqlite*' -x run 
 
 If you're developing locally you need to add the following to `/etc/docker/daemon.json`
