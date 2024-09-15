@@ -66,7 +66,6 @@ async fn start_blob_upload(
     name: web::Path<String>,
     data: web::Data<RegistryData>,
 ) -> impl Responder {
-    log::info!("Start blob upload");
     let upload_uuid = Uuid::new_v4().to_string();
 
     let new_blob = Blob {
@@ -104,7 +103,6 @@ async fn complete_blob_upload(
     _query: web::Query<UploadParams>,
     body: web::Bytes,
 ) -> impl Responder {
-    log::info!("Complete blob upload");
     let (name, uuid) = path.into_inner();
 
     let target = blobs
@@ -149,17 +147,27 @@ async fn complete_blob_upload(
     }
 }
 
-async fn check_blob(data: web::Data<RegistryData>, digest: web::Path<String>) -> impl Responder {
+async fn check_blob(
+    data: web::Data<RegistryData>,
+    path: web::Path<(String, String)>,
+) -> impl Responder {
+    let (name, digest) = path.into_inner();
     let mut conn = data.pool.get().expect("Failed to get DB connection");
 
     let blob = blobs
-        .filter(schema::blobs::name.eq(digest.as_str()))
-        .filter(schema::blobs::uuid.eq(digest.as_str()))
+        .filter(schema::blobs::name.eq(name.trim()))
+        .filter(schema::blobs::digest.eq(digest.trim()))
         .first::<Blob>(&mut conn);
 
     match blob {
-        Ok(blob) => HttpResponse::Ok().body(blob.data),
-        Err(_) => HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" })),
+        Ok(blob) => {
+            log::info!("{}", blob.name);
+            HttpResponse::Ok().body(blob.data)
+        }
+        Err(_) => {
+            log::info!("couldn't find {} {}", name, digest);
+            HttpResponse::NotFound().json(serde_json::json!({ "error": "Blob not found" }))
+        }
     }
 }
 
@@ -350,7 +358,7 @@ async fn main() -> std::io::Result<()> {
                 "/v2/{name}/blobs/uploads/{uuid}",
                 web::put().to(complete_blob_upload),
             )
-            .route("/v2/{name}/blobs/{digest}", web::get().to(check_blob))
+            .route("/v2/{name}/blobs/{digest}", web::head().to(check_blob))
             .route("/v2/{name}/blobs/{digest}", web::get().to(fetch_blob))
             .route(
                 "/v2/{name}/manifests/{reference}",

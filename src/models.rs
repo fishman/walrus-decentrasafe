@@ -2,7 +2,7 @@ use crate::schema::{blobs, manifests};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Queryable, Insertable, Serialize)]
+#[derive(Queryable, Insertable, Serialize, Deserialize, Debug)]
 #[diesel(table_name = blobs)]
 pub struct Blob {
     pub uuid: String,
