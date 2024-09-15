@@ -1,4 +1,6 @@
-use actix_web::{middleware::from_fn, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{
+    get, head, middleware::from_fn, post, put, web, App, HttpResponse, HttpServer, Responder,
+};
 use core::str;
 use diesel::{
     prelude::*,
@@ -34,10 +36,6 @@ struct RegistryData {
     pool: Pool<ConnectionManager<SqliteConnection>>,
 }
 
-async fn readiness_check() -> impl Responder {
-    HttpResponse::Ok().body("Service is ready")
-}
-
 fn establish_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
     dotenv().ok();
     let database_url =
@@ -59,10 +57,17 @@ fn establish_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
     pool
 }
 
+#[get("/healthz")]
+async fn readiness_check() -> impl Responder {
+    HttpResponse::Ok().body("Service is ready")
+}
+
+#[get("/v2/")]
 async fn check_registry() -> impl Responder {
     HttpResponse::Ok().json(serde_json::json!({ "message": "OCI Registry v2" }))
 }
 
+#[post("/v2/{name}/blobs/uploads/")]
 async fn start_blob_upload(
     name: web::Path<String>,
     data: web::Data<RegistryData>,
@@ -99,6 +104,7 @@ async fn start_blob_upload(
     }
 }
 
+#[put("/v2/{name}/blobs/uploads/{uuid}")]
 async fn complete_blob_upload(
     data: web::Data<RegistryData>,
     path: web::Path<(String, String)>,
@@ -153,6 +159,7 @@ async fn complete_blob_upload(
     }
 }
 
+#[head("/v2/{name}/blobs/{digest}")]
 async fn check_blob(
     data: web::Data<RegistryData>,
     path: web::Path<(String, String)>,
@@ -177,6 +184,7 @@ async fn check_blob(
     }
 }
 
+#[get("/v2/{name}/blobs/{digest}")]
 async fn fetch_blob(
     data: web::Data<RegistryData>,
     path: web::Path<(String, String)>,
@@ -206,6 +214,7 @@ async fn fetch_blob(
     }
 }
 
+#[put("/v2/{name}/manifests/{reference}")]
 async fn upload_manifest(
     path: web::Path<(String, String)>,
     data: web::Data<RegistryData>,
@@ -258,6 +267,7 @@ async fn upload_manifest(
     }
 }
 
+#[head("/v2/{name}/manifests/{reference}")]
 async fn check_manifest(
     data: web::Data<RegistryData>,
     path: web::Path<(String, String)>,
@@ -287,6 +297,7 @@ async fn check_manifest(
     }
 }
 
+#[get("/v2/{name}/manifests/{reference}")]
 async fn fetch_manifest(
     data: web::Data<RegistryData>,
     name: web::Path<String>,
@@ -307,6 +318,7 @@ async fn fetch_manifest(
     }
 }
 
+#[get("/v2/{name}/tags/list")]
 async fn get_tags(data: web::Data<RegistryData>, name: web::Path<String>) -> impl Responder {
     let mut conn = data.pool.get().expect("Failed to get DB connection");
 
@@ -340,31 +352,17 @@ async fn main() -> std::io::Result<()> {
             .wrap(from_fn(highlight_status))
             .app_data(registry_data.clone())
             .app_data(web::PayloadConfig::new(1000000 * 250))
-            .route("/v2/", web::get().to(check_registry))
-            .route(
-                "/v2/{name}/blobs/uploads/",
-                web::post().to(start_blob_upload),
-            )
-            .route(
-                "/v2/{name}/blobs/uploads/{uuid}",
-                web::put().to(complete_blob_upload),
-            )
-            .route("/v2/{name}/blobs/{digest}", web::head().to(check_blob))
-            .route("/v2/{name}/blobs/{digest}", web::get().to(fetch_blob))
-            .route(
-                "/v2/{name}/manifests/{reference}",
-                web::head().to(check_manifest),
-            )
-            .route(
-                "/v2/{name}/manifests/{reference}",
-                web::get().to(fetch_manifest),
-            )
-            .route(
-                "/v2/{name}/manifests/{reference}",
-                web::put().to(upload_manifest),
-            )
-            .route("/v2/{name}/tags/list", web::get().to(get_tags))
-            .route("/healthz", web::get().to(readiness_check))
+            .service(check_registry)
+            .service(start_blob_upload)
+            .service(complete_blob_upload)
+            .service(check_blob)
+            .service(fetch_blob)
+            .service(check_manifest)
+            .service(fetch_manifest)
+            .service(upload_manifest)
+            .service(get_tags)
+            .service(readiness_check)
+        //.route("/healthz", web::get().to(readiness_check))
     })
     .bind(bind_address)?
     .run()

@@ -2,8 +2,9 @@
 name = "walrus-registry"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "walrus-registry"
+path = "src/main.rs"
 
 [dependencies]
 actix-web = "4.9.0"
