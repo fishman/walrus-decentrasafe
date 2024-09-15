@@ -177,36 +177,6 @@ async fn check_blob(
     }
 }
 
-//async fn check_blob(
-//    data: web::Data<RegistryData>,
-//    path: web::Path<(String, String)>,
-//) -> impl Responder {
-//    let (name, checksum) = path.into_inner();
-//    let mut conn = data.pool.get().expect("Failed to get DB connection");
-//
-//    let blob = blobs
-//        .filter(schema::manifests::name.eq(name.as_str()))
-//        .filter(schema::blobs::sha256digest.eq(checksum.as_str()))
-//        .first::<Blob>(&mut conn);
-//
-//    match blob {
-//        Ok(blob) => {
-//            let digest = format!("sha256:{}", calculate_sha256_digest(&blob.content));
-//            let content_length = manifest.content.len();
-//
-//            HttpResponse::Ok()
-//                .append_header(("Docker-Content-Digest", digest))
-//                .append_header(("Content-Length", content_length.to_string()))
-//                .json(serde_json::json!({
-//                    "status": "completed"
-//                }))
-//        }
-//        Err(_) => {
-//            HttpResponse::NotFound().json(serde_json::json!({ "error": "Manifest not found" }))
-//        }
-//    }
-//}
-
 async fn fetch_blob(
     data: web::Data<RegistryData>,
     path: web::Path<(String, String)>,
