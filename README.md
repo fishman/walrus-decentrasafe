@@ -1,6 +1,6 @@
 # Walrus Container Registry
 
-Welcome to the frist web 3.0 OCI/docker container registry.
+Welcome to the first web 3.0 OCI/docker container registry.
 
 ## FAQ
 
@@ -42,5 +42,6 @@ Inside the examples directory you can then run:
 Since there is no auth, you can override other peoples images or create funky stuff if you write to the same 
 
 ## TODO
-- [ ] Make sure the same layer is only uploaded once
-- [ ] Check checksum of blobs, on uploads and return already uploaded when it exists
+- [X] Make sure the same layer is only uploaded once
+- [X] Check checksum of blobs, on uploads and return already uploaded when it exists
+- [ ] Use Move smart contract

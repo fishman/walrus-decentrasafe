@@ -30,7 +30,7 @@ pub fn store_blob(filename: &str) -> Result<(String, String), Box<dyn std::error
     Ok((blob_id, tx_digest))
 }
 
-pub fn read_blob(uuid: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub fn read_blob(uuid: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let output = Command::new("walrus")
         .arg("--json")
         .arg("read")
@@ -49,6 +49,5 @@ pub fn read_blob(uuid: &str) -> Result<String, Box<dyn std::error::Error>> {
     let base64_blob = json_output["blob"].as_str().ok_or("Missing 'blob' field")?;
     let blob = STANDARD.decode(base64_blob)?;
 
-    Ok(String::from_utf8(blob)?)
+    Ok(blob)
 }
-
