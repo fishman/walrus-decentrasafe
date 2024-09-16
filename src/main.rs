@@ -1,6 +1,7 @@
 use actix_web::{
     get, head, middleware::from_fn, post, put, web, App, HttpResponse, HttpServer, Responder,
 };
+use clap::Parser;
 use core::str;
 use diesel::{
     prelude::*,
@@ -14,6 +15,8 @@ use serde::Deserialize;
 use std::{env, time::Duration};
 use uuid::Uuid;
 use walrus_registry::calculate_sha256_digest;
+mod walrus;
+use walrus::{read_blob, store_blob};
 
 mod models;
 mod schema;
@@ -31,9 +34,21 @@ struct UploadParams {
     digest: String,
 }
 
+#[derive(Parser, Debug)]
+#[command(
+    name = "Walrus Registry",
+    version = "1.0",
+    about = "A blob storage server."
+)]
+struct CliArgs {
+    #[arg(long, default_value_t = false)]
+    store_walrus: bool,
+}
+
 #[derive(Clone)]
 struct RegistryData {
     pool: Pool<ConnectionManager<SqliteConnection>>,
+    store_walrus: bool,
 }
 
 fn establish_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
@@ -67,6 +82,27 @@ async fn check_registry() -> impl Responder {
     HttpResponse::Ok().json(serde_json::json!({ "message": "OCI Registry v2" }))
 }
 
+#[get("/v2/{name}/walrus_blobs")]
+async fn get_walrus_blob_ids(
+    data: web::Data<RegistryData>,
+    name: web::Path<String>,
+) -> impl Responder {
+    let mut conn = data.pool.get().expect("Failed to get DB connection");
+
+    let blob_ids: Vec<Option<String>> = blobs
+        .filter(schema::blobs::name.eq(name.as_str()))
+        .select(schema::blobs::walrus_blob_id)
+        .load::<Option<String>>(&mut conn)
+        .expect("Error loading blob IDs");
+
+    let blob_ids: Vec<String> = blob_ids.into_iter().filter_map(|id| id).collect();
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "name": name.to_string(),
+        "walrus_blob_ids": blob_ids
+    }))
+}
+
 #[post("/v2/{name}/blobs/uploads/")]
 async fn start_blob_upload(
     name: web::Path<String>,
@@ -80,6 +116,7 @@ async fn start_blob_upload(
         content_length: None,
         name: name.clone(),
         data: vec![],
+        walrus_blob_id: None,
     };
 
     match data.pool.get() {
@@ -130,14 +167,28 @@ async fn complete_blob_upload(
             // upload lizes
             let content_length: i32 = body.len().try_into().unwrap();
 
-            let updated = diesel::update(target)
-                .set((
-                    schema::blobs::data.eq(body.to_vec()),
-                    schema::blobs::digest.eq(digest.clone()),
-                    schema::blobs::content_length.eq(content_length),
-                ))
-                .execute(&mut conn)
-                .expect("Failed to update blob data");
+            let updated: usize;
+            if data.store_walrus {
+                let blob_id = store_blob(body.to_vec()).unwrap();
+
+                updated = diesel::update(target)
+                    .set((
+                        schema::blobs::walrus_blob_id.eq(blob_id),
+                        schema::blobs::digest.eq(digest.clone()),
+                        schema::blobs::content_length.eq(content_length),
+                    ))
+                    .execute(&mut conn)
+                    .expect("Failed to update blob data");
+            } else {
+                updated = diesel::update(target)
+                    .set((
+                        schema::blobs::data.eq(body.to_vec()),
+                        schema::blobs::digest.eq(digest.clone()),
+                        schema::blobs::content_length.eq(content_length),
+                    ))
+                    .execute(&mut conn)
+                    .expect("Failed to update blob data");
+            }
 
             if updated == 1 {
                 HttpResponse::Created()
@@ -341,9 +392,13 @@ async fn main() -> std::io::Result<()> {
         env::var("BIND_ADDRESS").expect("BIND_ADDRESS must be set, please check .env.example");
     env_logger::init_from_env(Env::default().default_filter_or("info"));
 
+    let args = CliArgs::parse();
     let pool = establish_connection_pool();
 
-    let registry_data = web::Data::new(RegistryData { pool });
+    let registry_data = web::Data::new(RegistryData {
+        pool,
+        store_walrus: args.store_walrus,
+    });
 
     log::info!("Starting server");
     HttpServer::new(move || {
@@ -362,6 +417,7 @@ async fn main() -> std::io::Result<()> {
             .service(upload_manifest)
             .service(get_tags)
             .service(readiness_check)
+            .service(get_walrus_blob_ids)
         //.route("/healthz", web::get().to(readiness_check))
     })
     .bind(bind_address)?

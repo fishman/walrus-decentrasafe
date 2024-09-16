@@ -14,13 +14,15 @@ Time and money. In the spirit of hackathons this was coded in a weekend.
 ## Getting started
 
     cp .env.example .env
-    cargo run
+    make start-bg
 
     cd example
     docker build . -t localhost:8090/nginx2
     docker push localhost:8090/nginx2
 
 ## Development
+
+
     cargo install cargo-watch
     cargo install diesel_cli --no-default-features --features sqlite
     diesel migration run
@@ -44,4 +46,5 @@ Since there is no auth, you can override other peoples images or create funky st
 ## TODO
 - [X] Make sure the same layer is only uploaded once
 - [X] Check checksum of blobs, on uploads and return already uploaded when it exists
+- [ ] async processing for the walrus blobs
 - [ ] Use Move smart contract

@@ -10,6 +10,7 @@ pub struct Blob {
     pub digest: Option<String>,
     pub content_length: Option<i32>,
     pub data: Vec<u8>,
+    pub walrus_blob_id: Option<String>,
 }
 
 //#[derive(Insertable)]

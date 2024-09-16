@@ -4,6 +4,7 @@ CREATE TABLE blobs (
     digest TEXT,
     content_length INT,
     data BLOB NOT NULL,
+    walrus_blob_id TEXT,
     UNIQUE (name, digest)
 );
 CREATE INDEX idx_blobs_name ON blobs (name);

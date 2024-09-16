@@ -7,6 +7,7 @@ diesel::table! {
         digest -> Nullable<Text>,
         content_length -> Nullable<Integer>,
         data -> Binary,
+        walrus_blob_id -> Nullable<Text>,
     }
 }
 
