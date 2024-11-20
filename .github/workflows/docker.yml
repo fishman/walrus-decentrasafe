@@ -5,8 +5,6 @@ on:
     branches: [dev, flux, staging, dev*]
   pull_request:
     branches: [dev, flux, staging, dev*]
-  # Allows you to run this workflow manually from the Actions tab or through HTTP API
-  workflow_dispatch:
 
 jobs:
   build:
