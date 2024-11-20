@@ -13,6 +13,7 @@ jobs:
       contents: read
 
     runs-on: ubuntu-latest
+    environment: test
 
     steps:
       # Allow the job to fetch a GitHub ID token
