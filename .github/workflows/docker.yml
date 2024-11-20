@@ -41,7 +41,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          file: ./docker/php/Dockerfile
+          file: ./Dockerfile
           push: true
           tags: |
             ${{ vars.CR_REPO_URL }}/wlreg-web:${{ env.branch}}-latest
