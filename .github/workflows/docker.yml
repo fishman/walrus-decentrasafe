@@ -51,13 +51,13 @@ jobs:
             SERVICE_NAME=web
           cache-from: type=gha,scope=web-image
           cache-to: type=gha,mode=max,scope=web-image
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          file: ./docker/nginx/Dockerfile
-          push: true
-          tags: |
-            ${{ vars.CR_REPO_URL }}/wlreg-nginx:${{ env.branch}}-latest
-            ${{ vars.CR_REPO_URL }}/wlreg-nginx:${{ env.branch}}-${{ env.sha_short}}-${{env.timestamp}}
-          cache-from: type=gha,scope=nginx-image
-          cache-to: type=gha,mode=max,scope=nginx-image
+      # - name: Build and push
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     file: ./docker/nginx/Dockerfile
+      #     push: true
+      #     tags: |
+      #       ${{ vars.CR_REPO_URL }}/wlreg-nginx:${{ env.branch}}-latest
+      #       ${{ vars.CR_REPO_URL }}/wlreg-nginx:${{ env.branch}}-${{ env.sha_short}}-${{env.timestamp}}
+      #     cache-from: type=gha,scope=nginx-image
+      #     cache-to: type=gha,mode=max,scope=nginx-image
