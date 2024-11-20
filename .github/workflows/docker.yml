@@ -1,0 +1,64 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [dev, flux, staging, dev*]
+  pull_request:
+    branches: [dev, flux, staging, dev*]
+  # Allows you to run this workflow manually from the Actions tab or through HTTP API
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      id-token: write
+      contents: read
+
+    runs-on: ubuntu-latest
+
+    steps:
+      # Allow the job to fetch a GitHub ID token
+      - uses: actions/checkout@v3
+
+      - name: Setup docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Azure CR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.CR_REPO_URL }}
+          username: ${{ secrets.ACR_TOKEN_NAME }}
+          password: ${{ secrets.ACR_TOKEN_PASSWORD }}
+
+      - name: Set SHA
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD | tr -d '[:space:]')" >> "$GITHUB_ENV"
+      - name: Set Branch name
+        shell: bash
+        run: |
+          echo "branch=$(echo ${GITHUB_REF#refs/*/})" >> "$GITHUB_ENV"
+      - name: Set timestamp
+        run: |
+          echo "timestamp=$(date +'%s')" >> "$GITHUB_ENV"
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          file: ./docker/php/Dockerfile
+          push: true
+          tags: |
+            ${{ vars.CR_REPO_URL }}/wlreg-web:${{ env.branch}}-latest
+            ${{ vars.CR_REPO_URL }}/wlreg-web:${{ env.branch}}-${{ env.sha_short}}-${{env.timestamp}}
+          build-args: |
+            SERVICE_NAME=web
+          cache-from: type=gha,scope=web-image
+          cache-to: type=gha,mode=max,scope=web-image
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          file: ./docker/nginx/Dockerfile
+          push: true
+          tags: |
+            ${{ vars.CR_REPO_URL }}/wlreg-nginx:${{ env.branch}}-latest
+            ${{ vars.CR_REPO_URL }}/wlreg-nginx:${{ env.branch}}-${{ env.sha_short}}-${{env.timestamp}}
+          cache-from: type=gha,scope=nginx-image
+          cache-to: type=gha,mode=max,scope=nginx-image
